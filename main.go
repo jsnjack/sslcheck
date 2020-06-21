@@ -30,7 +30,7 @@ func init() {
 	fmt.Printf("sslcheck %s\n", version)
 	certPathFlag = flag.String("cert", "", ".pem file location. The file must include private key and full certificate chain")
 	hostnameFlag = flag.String("hostname", "", "hostname to verify the certificate")
-	portFlag = flag.String("port", "443", "If port is provided, starts HTTP server on it")
+	portFlag = flag.String("port", "", "If port is provided, starts HTTP server on it")
 	flag.Parse()
 }
 
@@ -168,6 +168,7 @@ func main() {
 	}
 
 	fmt.Println("ok")
+	fmt.Printf("Result %s: OK\n", *certPathFlag)
 
 	if *portFlag != "" {
 		fmt.Println("Starting HTTP server...")
