@@ -1,10 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -65,20 +70,46 @@ func main() {
 		os.Exit(1)
 	}
 
+	fmt.Printf("Verifying certificates order... ")
+	for idx, item := range certs {
+		switch idx {
+		case 0:
+			if item.IsCA {
+				fmt.Println("  cert 0 should not be a CA certificate")
+				os.Exit(1)
+			}
+			break
+		default:
+			if !item.IsCA {
+				fmt.Printf("  cert %d should be a CA certificate", idx)
+				os.Exit(1)
+			}
+			break
+		}
+	}
+	fmt.Println("ok")
+
 	intermediates := x509.NewCertPool()
 	for idx, item := range certs {
 		if idx != 0 && idx != len(certs)-1 {
+			fmt.Printf("Using %s as intermidiate certificate\n", item.Subject)
 			intermediates.AddCert(item)
 		}
 	}
 
 	roots := x509.NewCertPool()
-	roots.AddCert(certs[len(certs)-1])
+	if len(certs) > 1 {
+		rootCert := certs[len(certs)-1]
+		fmt.Printf("Using %s as root certificate\n", rootCert.Subject)
+		roots.AddCert(certs[len(certs)-1])
+	}
 
 	if *hostnameFlag == "" {
 		fmt.Println("WARNING: hostname is empty, extracting hostname from the certificate name")
 		*hostnameFlag = strings.TrimSuffix(filepath.Base(*certPathFlag), ".pem")
 	}
+
+	fmt.Printf("Verifying certificate and chain of trust for hostname %q... ", *hostnameFlag)
 
 	opts := x509.VerifyOptions{
 		DNSName:       *hostnameFlag,
@@ -86,12 +117,11 @@ func main() {
 		Roots:         roots,
 	}
 
-	fmt.Printf("Verifying certificate and chain of trust for hostname %q...", *hostnameFlag)
 	if _, err := certs[0].Verify(opts); err != nil {
 		fmt.Println("failed to verify certificate: " + err.Error())
 		os.Exit(1)
 	}
-	fmt.Println(" ok")
+	fmt.Println("ok")
 
 	var cert tls.Certificate
 	for _, item := range certs {
@@ -99,20 +129,45 @@ func main() {
 	}
 	cert.PrivateKey = privKey
 
-	fmt.Printf("Verifying private key...")
+	fmt.Printf("Verifying private key... ")
 
-	switch pubKey := certs[0].PublicKey.(type) {
+	switch pub := certs[0].PublicKey.(type) {
 	case *rsa.PublicKey:
-		if pubKey.N.Cmp(privKey.N) != 0 {
-			fmt.Println("private key does not match public key")
+		priv, ok := cert.PrivateKey.(*rsa.PrivateKey)
+		if !ok {
+			fmt.Println("tls: private key type does not match public key type")
 			os.Exit(1)
 		}
-		break
+		if pub.N.Cmp(priv.N) != 0 {
+			fmt.Println("tls: private key does not match public key")
+			os.Exit(1)
+		}
+	case *ecdsa.PublicKey:
+		priv, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
+		if !ok {
+			fmt.Println("tls: private key type does not match public key type")
+			os.Exit(1)
+		}
+		if pub.X.Cmp(priv.X) != 0 || pub.Y.Cmp(priv.Y) != 0 {
+			fmt.Println("tls: private key does not match public key")
+			os.Exit(1)
+		}
+	case ed25519.PublicKey:
+		priv, ok := cert.PrivateKey.(ed25519.PrivateKey)
+		if !ok {
+			fmt.Println("tls: private key type does not match public key type")
+			os.Exit(1)
+		}
+		if !bytes.Equal(priv.Public().(ed25519.PublicKey), pub) {
+			fmt.Println("tls: private key does not match public key")
+			os.Exit(1)
+		}
 	default:
-		fmt.Println("unsupported public key algorithm")
+		fmt.Println("tls: unknown public key algorithm")
 		os.Exit(1)
 	}
-	fmt.Println(" ok")
+
+	fmt.Println("ok")
 
 	if *serveFlag {
 		fmt.Println("Starting HTTP server...")
@@ -162,26 +217,45 @@ func extractCerts(data []byte) []*x509.Certificate {
 	return certs
 }
 
-func extractPrivateKey(data []byte) *rsa.PrivateKey {
+func extractPrivateKey(data []byte) crypto.PrivateKey {
 	for len(data) > 0 {
 		var block *pem.Block
 		block, data = pem.Decode(data)
 		if block == nil {
 			break
 		}
-		if block.Type != "PRIVATE KEY" || len(block.Headers) != 0 {
+		if !strings.Contains(block.Type, "PRIVATE KEY") || len(block.Headers) != 0 {
 			continue
 		}
 
-		item, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		item, err := parsePrivateKey(block.Bytes)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		pkey, ok := item.(*rsa.PrivateKey)
-		if ok {
-			return pkey
-		}
+		return item
 	}
 	return nil
+}
+
+// Attempt to parse the given private key DER block. OpenSSL 0.9.8 generates
+// PKCS#1 private keys by default, while OpenSSL 1.0.0 generates PKCS#8 keys.
+// OpenSSL ecparam generates SEC1 EC private keys for ECDSA. We try all three.
+func parsePrivateKey(der []byte) (crypto.PrivateKey, error) {
+	if key, err := x509.ParsePKCS1PrivateKey(der); err == nil {
+		return key, nil
+	}
+	if key, err := x509.ParsePKCS8PrivateKey(der); err == nil {
+		switch key := key.(type) {
+		case *rsa.PrivateKey, *ecdsa.PrivateKey, ed25519.PrivateKey:
+			return key, nil
+		default:
+			return nil, errors.New("found unknown private key type in PKCS#8 wrapping")
+		}
+	}
+	if key, err := x509.ParseECPrivateKey(der); err == nil {
+		return key, nil
+	}
+
+	return nil, errors.New("failed to parse private key")
 }
