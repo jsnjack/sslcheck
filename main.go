@@ -25,8 +25,10 @@ var certPathFlag *string
 var hostnameFlag *string
 var serveFlag *bool
 var portFlag *string
+var version string
 
 func init() {
+	fmt.Printf("sslcheck %s\n", version)
 	certPathFlag = flag.String("cert", "", ".pem file location. The file must include private key and full certificate chain")
 	hostnameFlag = flag.String("hostname", "", "hostname to verify the certificate")
 	serveFlag = flag.Bool("serve", false, "Start HTTP server with provided certificate")
