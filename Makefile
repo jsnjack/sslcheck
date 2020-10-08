@@ -24,6 +24,6 @@ build: bin/${BINARY} bin/${BINARY}_linux_amd64 bin/${BINARY}_darwin_amd64
 release: build
 	tar --transform='s,_.*,,' --transform='s,bin/,,' -cz -f bin/${BINARY}_linux_amd64.tar.gz bin/${BINARY}_linux_amd64
 	tar --transform='s,_.*,,' --transform='s,bin/,,' -cz -f bin/${BINARY}_darwin_amd64.tar.gz bin/${BINARY}_darwin_amd64
-	grm release jsnjack/${BINARY} -f bin/${BINARY} -f bin/${BINARY}_linux_amd64.tar.gz -f bin/${BINARY}_darwin_amd64.tar.gz -t "v`monova`"
+	grm release jsnjack/${BINARY} -f bin/${BINARY}_linux_amd64.tar.gz -f bin/${BINARY}_darwin_amd64.tar.gz -t "v`monova`"
 
 .PHONY: version release build
