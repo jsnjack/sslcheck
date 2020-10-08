@@ -10,14 +10,20 @@ else
 	$(info "Install monova (https://github.com/jsnjack/monova) to calculate version")
 endif
 
-.ONESHELL:
-bin/${BINARY}: version *.go
-	go build -ldflags="-X main.version=${VERSION}" -o bin/${BINARY}
+bin/${BINARY}: bin/${BINARY}_linux_amd64
+	cp bin/${BINARY}_linux_amd64 bin/${BINARY}
 
-build: bin/${BINARY}
+bin/${BINARY}_linux_amd64: version main.go cmd/*.go
+	GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o bin/${BINARY}_linux_amd64
 
-release: bin/${BINARY}
+bin/${BINARY}_darwin_amd64: version main.go cmd/*.go
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o bin/${BINARY}_darwin_amd64
 
-	grm release jsnjack/sslcheck -f bin/${BINARY} -t "v`monova`"
+build: bin/${BINARY} bin/${BINARY}_linux_amd64 bin/${BINARY}_darwin_amd64
+
+release: build
+	tar --transform='s,_.*,,' --transform='s,bin/,,' -cz -f bin/${BINARY}_linux_amd64.tar.gz bin/${BINARY}_linux_amd64
+	tar --transform='s,_.*,,' --transform='s,bin/,,' -cz -f bin/${BINARY}_darwin_amd64.tar.gz bin/${BINARY}_darwin_amd64
+	grm release jsnjack/${BINARY} -f bin/${BINARY} -f bin/${BINARY}_linux_amd64.tar.gz -f bin/${BINARY}_darwin_amd64.tar.gz -t "v`monova`"
 
 .PHONY: version release build
