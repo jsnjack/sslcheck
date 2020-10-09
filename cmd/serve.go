@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -41,6 +42,8 @@ var serveCmd = &cobra.Command{
 		logln("  ok")
 
 		fmt.Println("Starting webserver...")
+		dnsName := strings.Replace(certs[0].DNSNames[0], "*.", "", 1)
+		fmt.Printf("  example: curl --resolve *:%d:127.0.0.1 https://%s:%d -v\n", servePort, dnsName, servePort)
 
 		var cert tls.Certificate
 		for _, item := range certs {
@@ -54,7 +57,6 @@ var serveCmd = &cobra.Command{
 			Addr:      fmt.Sprintf(":%d", servePort),
 			TLSConfig: cfg,
 		}
-		fmt.Println(" ok")
 		log.Fatal(server.ListenAndServeTLS("", ""))
 		return nil
 	},

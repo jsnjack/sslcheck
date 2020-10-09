@@ -2,21 +2,32 @@ sslcheck
 ====
 
 ### What is it?
-`sslcheck` verifies SSL certificates:
+`sslcheck` verifies the following in SSL certificates:
  - contains private key
  - contains full chain of trust
  - expiration date
+ - is wildcard certificate
+
+Verified certificates can be used in haproxy
 
 ### How to use it?
 ```bash
-$ ./sslcheck -h
-Usage of ./bin/sslcheck:
-  -cert string
-        .pem file location. The file must include private key and full certificate chain
-  -hostname string
-        hostname to verify the certificate
-  -port string
-        If port is provided, starts HTTP server on it (default "443")
+$ sslcheck
+Verify SSL certificate
+
+Usage:
+  sslcheck [command]
+
+Available Commands:
+  help        Help about any command
+  serve       Start webserver on provided port
+  verify      Verify SSL certificate
+  version     Print version
+
+Flags:
+  -c, --cert string   certificate file
+  -h, --help          help for sslcheck
+  -v, --verbose       verbose output
 ```
 
 #### Using curl with sslcheck HTTP server on custom port
