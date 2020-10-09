@@ -28,6 +28,10 @@ var verifyCmd = &cobra.Command{
 		}
 		cmd.SilenceUsage = true
 
+		if !rootVerbose {
+			fmt.Printf("> Verifying %s...\n", rootCertPath)
+		}
+
 		// Parse and extract certificates
 		logf("> Parsing the certificate %s...\n", rootCertPath)
 
@@ -73,7 +77,10 @@ var verifyCmd = &cobra.Command{
 		}
 		logln("  ok")
 
-		fmt.Printf("> Certificate %s: ok\n", rootCertPath)
+		logf("> Certificate %s: ok\n", rootCertPath)
+		if !rootVerbose {
+			fmt.Println("  ok")
+		}
 		return nil
 	},
 }
@@ -172,7 +179,7 @@ func verifyCertificate(certs []*x509.Certificate, hostname string) error {
 	// Verify random subdomain
 	opts.DNSName = "veryrandomdomain." + hostname
 	if _, err := certs[0].Verify(opts); err != nil {
-		return fmt.Errorf("not a vild card certificate")
+		return fmt.Errorf("not a wildcard certificate")
 	}
 	return nil
 }
