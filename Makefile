@@ -14,10 +14,10 @@ bin/${BINARY}: bin/${BINARY}_linux_amd64
 	cp bin/${BINARY}_linux_amd64 bin/${BINARY}
 
 bin/${BINARY}_linux_amd64: version *.go
-	GOOS=linux GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o bin/${BINARY}_linux_amd64
+	GOOS=linux GOARCH=amd64 go build -ldflags="-X github.com/jsnjack/sslcheck/cmd.Version=${VERSION}" -o bin/${BINARY}_linux_amd64
 
 bin/${BINARY}_darwin_amd64: version *.go
-	GOOS=darwin GOARCH=amd64 go build -ldflags="-X main.version=${VERSION}" -o bin/${BINARY}_darwin_amd64
+	GOOS=darwin GOARCH=amd64 go build -ldflags="-X github.com/jsnjack/sslcheck/cmd.Version=${VERSION}" -o bin/${BINARY}_darwin_amd64
 
 build: bin/${BINARY} bin/${BINARY}_linux_amd64 bin/${BINARY}_darwin_amd64
 
