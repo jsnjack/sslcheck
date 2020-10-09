@@ -17,6 +17,9 @@ import (
 
 func readCert() ([]byte, error) {
 	var data []byte
+	if rootCertPath == "" {
+		return nil, fmt.Errorf("provide certificate file")
+	}
 	_, err := os.Stat(rootCertPath)
 	if err == nil {
 		data, err = ioutil.ReadFile(rootCertPath)

@@ -17,10 +17,12 @@ var serveCmd = &cobra.Command{
 	Use:   "serve -c <certificate>",
 	Short: "Start webserver on provided port",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		cmd.SilenceErrors = true
 		data, err := readCert()
 		if err != nil {
 			return err
 		}
+		cmd.SilenceUsage = true
 
 		// Parse and extract certificates
 		logf("> Parsing the certificate %s...\n", rootCertPath)
