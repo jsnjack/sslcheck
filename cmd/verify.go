@@ -174,13 +174,15 @@ func verifyCertificate(certs []*x509.Certificate, hostname string) error {
 	}
 
 	// Verify domain name
+	logf("  verifying for %q...\n", opts.DNSName)
 	if _, err := certs[0].Verify(opts); err != nil {
 		return err
 	}
 
 	if !verifySkipWildcard {
 		// Verify random subdomain
-		opts.DNSName = "veryrandomdomain." + hostname
+		opts.DNSName = "_wildcard." + hostname
+		logf("  verifying for %q...\n", opts.DNSName)
 		if _, err := certs[0].Verify(opts); err != nil {
 			return fmt.Errorf("not a wildcard certificate")
 		}
