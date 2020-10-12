@@ -38,7 +38,9 @@ curl --resolve *:8443:127.0.0.1 https://example.com:8443 -v
 
 
 ### How to install it?
-```bash
-grm install jsnjack/sslcheck
-```
+ - Using [grm](https://github.com/jsnjack/grm)
+    ```bash
+    grm install jsnjack/sslcheck
+    ```
+ - Download binary from [Release](https://github.com/jsnjack/sslcheck/releases/latest/) page
 
