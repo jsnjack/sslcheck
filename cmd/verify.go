@@ -15,6 +15,7 @@ import (
 )
 
 var verifyDomainname string
+var verifySkipWildcard bool
 
 // verifyCmd represents the verify command
 var verifyCmd = &cobra.Command{
@@ -97,6 +98,7 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	verifyCmd.Flags().StringVarP(&verifyDomainname, "domain", "d", "", "Domain name to use to verify the certificate (default: extracted from the file name)")
+	verifyCmd.Flags().BoolVarP(&verifySkipWildcard, "wildcard", "w", false, "Do not verify is the certificate is a wildcard certificate")
 }
 
 // Verifies certificates order
@@ -176,10 +178,14 @@ func verifyCertificate(certs []*x509.Certificate, hostname string) error {
 		return err
 	}
 
-	// Verify random subdomain
-	opts.DNSName = "veryrandomdomain." + hostname
-	if _, err := certs[0].Verify(opts); err != nil {
-		return fmt.Errorf("not a wildcard certificate")
+	if !verifySkipWildcard {
+		// Verify random subdomain
+		opts.DNSName = "veryrandomdomain." + hostname
+		if _, err := certs[0].Verify(opts); err != nil {
+			return fmt.Errorf("not a wildcard certificate")
+		}
+	} else {
+		logln("  skipping wildcard verification")
 	}
 	return nil
 }
