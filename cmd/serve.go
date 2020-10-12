@@ -75,7 +75,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	serveCmd.Flags().IntVarP(&servePort, "port", "p", 8080, "Port to start webserver on")
+	serveCmd.Flags().IntVarP(&servePort, "port", "p", 8443, "Port to start webserver on")
 }
 
 func serveHandle(w http.ResponseWriter, req *http.Request) {
