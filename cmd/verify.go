@@ -164,7 +164,7 @@ func verifyCertificate(certs []*x509.Certificate, hostname string) error {
 	roots := x509.NewCertPool()
 	if len(certs) > 1 {
 		rootCert := certs[len(certs)-1]
-		logf("  Using cert [%d] (%s) as root certificate\n", len(certs)-1, rootCert.Subject)
+		logf("  > Using cert [%d] (%s) as root certificate\n", len(certs)-1, rootCert.Subject)
 		roots.AddCert(rootCert)
 	}
 	opts := x509.VerifyOptions{
@@ -173,21 +173,37 @@ func verifyCertificate(certs []*x509.Certificate, hostname string) error {
 		Roots:         roots,
 	}
 
+	err := _verifyCertificate(certs[0], opts)
+	if err != nil {
+		return err
+	}
+
+	logf("  > Using the system roots to check if its a self-signed certificate\n")
+	opts.Roots = nil
+	err = _verifyCertificate(certs[0], opts)
+	if err != nil {
+		fmt.Printf("> [WARNING] This is a self-signed certificate\n")
+	}
+
+	return nil
+}
+
+func _verifyCertificate(cert *x509.Certificate, opts x509.VerifyOptions) error {
 	// Verify domain name
-	logf("  verifying for %q...\n", opts.DNSName)
-	if _, err := certs[0].Verify(opts); err != nil {
+	logf("    verifying for %q...\n", opts.DNSName)
+	if _, err := cert.Verify(opts); err != nil {
 		return err
 	}
 
 	if !verifySkipWildcard {
 		// Verify random subdomain
-		opts.DNSName = "_wildcard." + hostname
-		logf("  verifying for %q...\n", opts.DNSName)
-		if _, err := certs[0].Verify(opts); err != nil {
+		opts.DNSName = "_wildcard." + opts.DNSName
+		logf("    verifying for %q...\n", opts.DNSName)
+		if _, err := cert.Verify(opts); err != nil {
 			return fmt.Errorf("not a wildcard certificate")
 		}
 	} else {
-		logln("  skipping wildcard verification")
+		logln("    skipping wildcard verification")
 	}
 	return nil
 }
