@@ -9,26 +9,95 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
-func readCert() ([]byte, error) {
-	var data []byte
-	if rootCertPath == "" {
-		return nil, fmt.Errorf("provide certificate file")
+// SSLCertificate represents a certificate and private key pair
+type SSLCertificate struct {
+	Certificates []*x509.Certificate
+	PrivateKey   crypto.PrivateKey
+	raw          []byte
+	filename     string
+}
+
+// NewSSLCertificate creates a new SSLCertificates
+func NewSSLCertificates(target string) ([]*SSLCertificate, error) {
+	if target == "" {
+		return nil, fmt.Errorf("provide target directory or file")
 	}
-	_, err := os.Stat(rootCertPath)
-	if err == nil {
-		data, err = ioutil.ReadFile(rootCertPath)
+	info, err := os.Stat(target)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var certs []*SSLCertificate
+
+	if info.IsDir() {
+		entries, err := os.ReadDir(target)
 		if err != nil {
 			return nil, err
 		}
-		return data, nil
+		for _, f := range entries {
+			if !f.IsDir() && strings.HasSuffix(f.Name(), ".pem") {
+				absPath, err := filepath.Abs(target + "/" + f.Name())
+				if err != nil {
+					return nil, err
+				}
+				d, err := os.ReadFile(absPath)
+				if err != nil {
+					return nil, err
+				}
+				// Extract certificates
+				sslCert, err := createSSLCertificate(d, absPath)
+				if err != nil {
+					return nil, err
+				}
+				certs = append(certs, sslCert)
+			}
+		}
+	} else {
+		absPath, err := filepath.Abs(target)
+		if err != nil {
+			return nil, err
+		}
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			return nil, err
+		}
+		sslCert, err := createSSLCertificate(data, absPath)
+		if err != nil {
+			return nil, err
+		}
+		certs = append(certs, sslCert)
 	}
-	return nil, err
+	return certs, nil
+}
+
+func createSSLCertificate(data []byte, filename string) (*SSLCertificate, error) {
+	// Extract certificates
+	logf("> Parsing the certificate %s...\n", filename)
+	sslCert := &SSLCertificate{raw: data, filename: filename}
+	extractedCerts, err := extractCerts(data)
+	if err != nil {
+		return nil, err
+	}
+	logf("  extracted %d certificates\n", len(extractedCerts))
+	if len(extractedCerts) == 0 {
+		return nil, fmt.Errorf("unable to extract certificates")
+	}
+	sslCert.Certificates = extractedCerts
+	// Extract privatekey
+	logln("  extracting private key...")
+	extractedPK, err := extractPrivateKey(data)
+	if err != nil {
+		return nil, err
+	}
+	sslCert.PrivateKey = extractedPK
+	return sslCert, nil
 }
 
 func extractCerts(data []byte) ([]*x509.Certificate, error) {
@@ -50,7 +119,7 @@ func extractCerts(data []byte) ([]*x509.Certificate, error) {
 		format := "%+19s: %s\n"
 		logf(format, "found certificate", item.Subject)
 		logf(format, "issuer", item.Issuer)
-		logf(format, "expires in", fmt.Sprintf("%.0f days\n", item.NotAfter.Sub(time.Now()).Hours()/24))
+		logf(format, "expires in", fmt.Sprintf("%.0f days\n", time.Until(item.NotAfter).Hours()/24))
 
 		if item.NotAfter.Before(time.Now()) {
 			return nil, fmt.Errorf("the certificate has expired on %v", item.NotAfter)
@@ -80,7 +149,7 @@ func extractPrivateKey(data []byte) (crypto.PrivateKey, error) {
 		}
 		return item, nil
 	}
-	return nil, fmt.Errorf("Private key not found")
+	return nil, fmt.Errorf("private key not found")
 }
 
 // Attempt to parse the given private key DER block. OpenSSL 0.9.8 generates

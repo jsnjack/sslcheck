@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -18,43 +17,34 @@ var serveCmd = &cobra.Command{
 	Short: "Start webserver on provided port",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
-		data, err := readCert()
-		if err != nil {
-			return err
+		if rootCertPath == "" && rootTargetPath == "" {
+			return fmt.Errorf("provide certificate file or directory")
 		}
 		cmd.SilenceUsage = true
-
-		// Parse and extract certificates
-		logf("> Parsing the certificate %s...\n", rootCertPath)
-
-		certs, err := extractCerts(data)
+		target := rootTargetPath
+		if target == "" {
+			target = rootCertPath
+		}
+		certs, err := NewSSLCertificates(target)
 		if err != nil {
 			return err
 		}
-		logf("  extracted %d certificates\n", len(certs))
-		if len(certs) == 0 {
-			return fmt.Errorf("unable to extract certificates")
-		}
-
-		logln("> Extracting private key...")
-		privKey, err := extractPrivateKey(data)
-		if err != nil {
-			return err
-		}
-		logln("  ok")
 
 		fmt.Println("Starting webserver...")
-		dnsName := strings.Replace(certs[0].DNSNames[0], "*.", "", 1)
-		fmt.Printf("  example: curl --resolve *:%d:127.0.0.1 https://%s:%d -v\n", servePort, dnsName, servePort)
+		fmt.Printf("  example: curl --resolve *:%d:127.0.0.1 https://example.com:%d -v\n", servePort, servePort)
 
-		var cert tls.Certificate
+		// Convert to tls.Certificate
+		tlsCerts := []tls.Certificate{}
 		for _, item := range certs {
-			cert.Certificate = append(cert.Certificate, item.Raw)
+			certToServe := tls.Certificate{}
+			certToServe.PrivateKey = item.PrivateKey
+			for _, cert := range item.Certificates {
+				certToServe.Certificate = append(certToServe.Certificate, cert.Raw)
+			}
+			tlsCerts = append(tlsCerts, certToServe)
 		}
-		cert.PrivateKey = privKey
-
 		http.HandleFunc("/", serveHandle)
-		cfg := &tls.Config{Certificates: []tls.Certificate{cert}}
+		cfg := &tls.Config{Certificates: tlsCerts}
 		server := &http.Server{
 			Addr:      fmt.Sprintf(":%d", servePort),
 			TLSConfig: cfg,
@@ -75,7 +65,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	serveCmd.Flags().IntVarP(&servePort, "port", "p", 8443, "Port to start webserver on")
+	serveCmd.Flags().IntVarP(&servePort, "port", "p", 8443, "port to start webserver on")
 }
 
 func serveHandle(w http.ResponseWriter, req *http.Request) {

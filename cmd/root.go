@@ -8,6 +8,7 @@ import (
 )
 
 var rootCertPath string
+var rootTargetPath string
 var rootVerbose bool
 
 // rootCmd represents the base command when called without any subcommands
@@ -30,6 +31,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVarP(&rootCertPath, "cert", "c", "", "certificate file")
+	rootCmd.PersistentFlags().StringVarP(&rootCertPath, "cert", "c", "", "certificate file (deprecated)")
+	rootCmd.PersistentFlags().StringVarP(&rootTargetPath, "target", "t", "", "a file or directory with *.pem files")
 	rootCmd.PersistentFlags().BoolVarP(&rootVerbose, "verbose", "v", false, "verbose output")
 }

@@ -23,64 +23,73 @@ var verifyCmd = &cobra.Command{
 	Short: "Verify SSL certificate",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceErrors = true
-		data, err := readCert()
-		if err != nil {
-			return err
+		if rootCertPath == "" && rootTargetPath == "" {
+			return fmt.Errorf("provide certificate file or directory")
 		}
 		cmd.SilenceUsage = true
-
-		if !rootVerbose {
-			fmt.Printf("> Verifying %s...\n", rootCertPath)
+		target := rootTargetPath
+		if target == "" {
+			target = rootCertPath
 		}
-
-		// Parse and extract certificates
-		logf("> Parsing the certificate %s...\n", rootCertPath)
-
-		certs, err := extractCerts(data)
+		certs, err := NewSSLCertificates(target)
 		if err != nil {
 			return err
 		}
-		logf("  extracted %d certificates\n", len(certs))
-		if len(certs) == 0 {
-			return fmt.Errorf("unable to extract certificates")
+
+		if len(certs) > 1 && verifyDomainname == "" {
+			return fmt.Errorf("found multiple certificates; provide domain name")
 		}
 
-		logln("> Extracting private key...")
-		privKey, err := extractPrivateKey(data)
-		if err != nil {
-			return err
-		}
-		logln("  ok")
+		result := make(map[*SSLCertificate]bool)
 
-		logln("> Verifying certificates order...")
-		err = verifyOrder(certs)
-		if err != nil {
-			return err
-		}
-		logln("  ok")
+		for _, item := range certs {
+			logf("> Verifying certificate %s...\n", item.filename)
+			result[item] = true
 
-		logln("> Verifying private key...")
-		err = verifyPrivateKey(certs[0].PublicKey, privKey)
-		if err != nil {
-			return err
-		}
-		logln("  ok")
+			logln("> Verifying certificates order...")
+			err = verifyOrder(item.Certificates)
+			if err != nil {
+				logln(err.Error())
+				result[item] = false
+			} else {
+				logln("  ok")
+			}
 
-		logln("> Verifying certificate and chain of trust...")
-		if verifyDomainname == "" {
-			logln("  WARNING: domain name is empty, extracting domain name from the certificate name")
-			verifyDomainname = strings.TrimSuffix(filepath.Base(rootCertPath), ".pem")
-			logf("  Domain name: %q\n", verifyDomainname)
-		}
-		err = verifyCertificate(certs, verifyDomainname)
-		if err != nil {
-			return err
-		}
-		logln("  ok")
+			logln("> Verifying private key...")
+			err = verifyPrivateKey(item.Certificates[0].PublicKey, item.PrivateKey)
+			if err != nil {
+				logln(err.Error())
+				result[item] = false
+			} else {
+				logln("  ok")
+			}
 
-		logf("> Certificate %s: ok\n", rootCertPath)
-		if !rootVerbose {
-			fmt.Println("  ok")
+			logln("> Verifying certificate and chain of trust...")
+			if verifyDomainname == "" {
+				logln("  WARNING: domain name is empty, extracting domain name from the certificate name")
+				verifyDomainname = strings.TrimSuffix(filepath.Base(item.filename), ".pem")
+				logf("  Domain name: %q\n", verifyDomainname)
+			}
+			err = verifyCertificate(item.Certificates, verifyDomainname)
+			if err != nil {
+				logln(err.Error())
+				result[item] = false
+			} else {
+				logln("  ok")
+			}
+		}
+
+		isValid := false
+		for item, valid := range result {
+			if valid {
+				fmt.Printf("> Certificate %s is valid\n", item.filename)
+				isValid = true
+				break
+			}
+		}
+
+		if !isValid {
+			return fmt.Errorf("no valid certificates found")
 		}
 		return nil
 	},
@@ -97,8 +106,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	verifyCmd.Flags().StringVarP(&verifyDomainname, "domain", "d", "", "Domain name to use to verify the certificate (default: extracted from the file name)")
-	verifyCmd.Flags().BoolVarP(&verifySkipWildcard, "wildcard", "w", false, "Do not verify is the certificate is a wildcard certificate")
+	verifyCmd.Flags().StringVarP(&verifyDomainname, "domain", "d", "", "domain name to use to verify the certificate (default: extracted from the file name)")
+	verifyCmd.Flags().BoolVarP(&verifySkipWildcard, "no-wildcard", "w", false, "do not require wildcard certificate")
 }
 
 // Verifies certificates order
@@ -109,7 +118,6 @@ func verifyOrder(certs []*x509.Certificate) error {
 			if item.IsCA {
 				return fmt.Errorf("cert 0 should not be a CA certificate")
 			}
-			break
 		default:
 			if !item.IsCA {
 				return fmt.Errorf("cert %d should be a CA certificate (intermediate or root)", idx)
